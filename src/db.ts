@@ -429,6 +429,17 @@ export function getDueTasks(): ScheduledTask[] {
     .all(now) as ScheduledTask[];
 }
 
+/**
+ * Advance next_run before execution to prevent the scheduler from
+ * re-queuing the same task while it's still running.
+ */
+export function advanceNextRun(id: string, nextRun: string | null): void {
+  db.prepare('UPDATE scheduled_tasks SET next_run = ? WHERE id = ?').run(
+    nextRun,
+    id,
+  );
+}
+
 export function updateTaskAfterRun(
   id: string,
   nextRun: string | null,

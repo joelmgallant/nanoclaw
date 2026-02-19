@@ -12,6 +12,7 @@ import {
 } from './config.js';
 import { ContainerOutput, runContainerAgent, writeTasksSnapshot } from './container-runner.js';
 import {
+  advanceNextRun,
   getAllTasks,
   getDueTasks,
   getTaskById,
@@ -200,6 +201,18 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
         if (!currentTask || currentTask.status !== 'active') {
           continue;
         }
+
+        // Advance next_run BEFORE execution to prevent the scheduler from
+        // re-queuing the same task while the container is still running.
+        let nextRun: string | null = null;
+        if (currentTask.schedule_type === 'cron') {
+          const interval = CronExpressionParser.parse(currentTask.schedule_value, { tz: TIMEZONE });
+          nextRun = interval.next().toISOString();
+        } else if (currentTask.schedule_type === 'interval') {
+          const ms = parseInt(currentTask.schedule_value, 10);
+          nextRun = new Date(Date.now() + ms).toISOString();
+        }
+        advanceNextRun(currentTask.id, nextRun);
 
         deps.queue.enqueueTask(
           currentTask.chat_jid,
