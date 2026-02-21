@@ -258,6 +258,8 @@ docker build -t nanoclaw-agent:latest container/
 sudo systemctl restart nanoclaw
 ```
 
+> **After a rebase:** If you rebased and force-pushed your fork, `git pull` will fail with divergent branches. Use `git reset --hard origin/main` instead of `git pull` (safe as long as the VPS has no unique local commits).
+
 ## FAQ
 
 **Why WhatsApp and not Telegram/Signal/etc?**
