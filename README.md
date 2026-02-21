@@ -137,6 +137,127 @@ Key files:
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
 - `groups/*/CLAUDE.md` - Per-group memory
 
+## Syncing Your Fork
+
+NanoClaw is designed to be forked and customized. To pull in upstream changes:
+
+```bash
+# One-time: add the upstream remote
+git remote add upstream https://github.com/qwibitai/nanoclaw.git
+
+# Pull upstream changes (rebase keeps your commits on top)
+git fetch upstream
+git rebase upstream/main
+```
+
+If you've customized code that upstream also changed, you'll hit conflicts. Resolve them by keeping whichever version is better (usually upstream for core infrastructure, yours for customizations), then:
+
+```bash
+git add <resolved-files>
+git rebase --continue
+```
+
+After rebasing, push to your fork:
+
+```bash
+git push origin main --force-with-lease
+```
+
+## Deploying to a VPS
+
+NanoClaw runs well on a small Linux VPS (2 cores, 2GB RAM minimum). Here's the full process.
+
+### 1. System Prep
+
+```bash
+ssh your-vps
+
+# Create a dedicated user
+useradd -m -s /bin/bash nanoclaw
+usermod -aG docker nanoclaw
+
+# Add swap (recommended for small VPS)
+fallocate -l 4G /swapfile
+chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+systemctl enable docker
+```
+
+### 2. Deploy Code
+
+```bash
+su - nanoclaw
+git clone git@github.com:YOUR_USER/nanoclaw.git
+cd nanoclaw
+npm install && npm run build
+docker build -t nanoclaw-agent:latest container/
+```
+
+Copy your `.env` file to the VPS (contains `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`).
+
+### 3. Migrate State (if moving from another machine)
+
+```bash
+# From your local machine:
+rsync -avz store/auth/ nanoclaw@your-vps:nanoclaw/store/auth/
+rsync -avz store/messages.db nanoclaw@your-vps:nanoclaw/store/
+rsync -avz groups/ nanoclaw@your-vps:nanoclaw/groups/
+rsync -avz data/ nanoclaw@your-vps:nanoclaw/data/
+```
+
+> **Note:** WhatsApp only allows one active web session. Starting the VPS instance will disconnect your local one.
+
+### 4. Create systemd Service
+
+Create `/etc/systemd/system/nanoclaw.service`:
+
+```ini
+[Unit]
+Description=NanoClaw Claude Assistant
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=nanoclaw
+WorkingDirectory=/home/nanoclaw/nanoclaw
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl enable --now nanoclaw
+```
+
+### 5. Verify
+
+```bash
+systemctl status nanoclaw          # service running
+journalctl -u nanoclaw -f          # watch logs
+docker ps                          # containers spawn on messages
+```
+
+### Updating
+
+```bash
+ssh your-vps
+su - nanoclaw
+cd nanoclaw
+git pull
+npm install && npm run build
+docker build -t nanoclaw-agent:latest container/
+sudo systemctl restart nanoclaw
+```
+
 ## FAQ
 
 **Why WhatsApp and not Telegram/Signal/etc?**
