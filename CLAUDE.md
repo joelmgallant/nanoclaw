@@ -45,6 +45,44 @@ launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
 launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
 ```
 
+## VPS Deployment
+
+Host: `ssh qnetwork` (178.156.135.232, root). App runs as `nanoclaw` user.
+
+```bash
+# Update deployment
+ssh qnetwork
+su - nanoclaw
+cd /home/nanoclaw/nanoclaw
+git pull                                          # or: git reset --hard origin/main (after rebase)
+npm install && npm run build
+docker build -t nanoclaw-agent:latest container/
+sudo systemctl restart nanoclaw
+```
+
+```bash
+# Check status
+ssh qnetwork "systemctl status nanoclaw --no-pager -l"
+ssh qnetwork "journalctl -u nanoclaw -f"
+```
+
+### WhatsApp Auth Expiry
+
+WhatsApp periodically invalidates linked device sessions. Symptoms: service crash-loops with `WhatsApp authentication required` in logs and high restart counter.
+
+Fix:
+```bash
+ssh qnetwork
+systemctl stop nanoclaw
+su - nanoclaw
+cd /home/nanoclaw/nanoclaw
+rm -rf store/auth && mkdir -p store/auth
+npx tsx src/whatsapp-auth.ts --pairing-code --phone 13064508803
+# Enter pairing code on phone: WhatsApp → Settings → Linked Devices → Link with phone number
+# Or scan the QR code: WhatsApp → Settings → Linked Devices → Link a Device
+systemctl start nanoclaw
+```
+
 ## Container Lifecycle
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
